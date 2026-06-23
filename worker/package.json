@@ -1,0 +1,33 @@
+{
+  "name": "apple-sync-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "db:migrate:notes": "wrangler d1 migrations apply apple-sync --local --migrations-dir migrations/notes",
+    "db:migrate:events": "wrangler d1 migrations apply apple-sync --local --migrations-dir migrations/events",
+    "db:migrate:notes:remote": "wrangler d1 migrations apply apple-sync --remote --migrations-dir migrations/notes",
+    "db:migrate:events:remote": "wrangler d1 migrations apply apple-sync --remote --migrations-dir migrations/events"
+  },
+  "dependencies": {
+    "hono": "^4.12.26"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.18",
+    "@cloudflare/workers-types": "^4.20260621.1",
+    "typescript": "^6.0.3",
+    "vitest": "~4.1.9",
+    "wrangler": "^4.103.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  }
+}

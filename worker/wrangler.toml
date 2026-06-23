@@ -1,0 +1,16 @@
+name = "apple-sync-worker"
+main = "src/index.ts"
+compatibility_date = "2026-03-01"
+
+[vars]
+# Test the dual-use shape: serve both notes and events tables from one D1.
+ENTITIES = "notes,note_folders,reminders,calendar_events,reminder_lists"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "apple-sync-test"
+database_id = "test"
+migrations_dir = "migrations/notes"
+
+[triggers]
+crons = ["0 3 * * *"]
