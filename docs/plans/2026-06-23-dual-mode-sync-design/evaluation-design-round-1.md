@@ -35,4 +35,3 @@ which this design uses (it uses A/B requirement IDs and folds risk-handling into
 Best-Practices). Both PASS under the literal check but are effectively no-ops against this artifact's
 conventions. Candidate for a checklist retrospective: generalize the requirement-ID pattern (e.g.
 `[A-Z]+-?[0-9]+`) and recognize risk content outside a "Risks" heading.
-</content>

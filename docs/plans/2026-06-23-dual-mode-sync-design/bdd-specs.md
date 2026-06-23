@@ -7,6 +7,8 @@ canonical per the glossary in `_index.md` ("self-host mode", "cloud mode", "tena
 
 ## Feature: Self-host mode regression (static API token)
 
+**Covers:** A3, A7
+
 ```gherkin
 Feature: Self-host mode keeps working unchanged
   As a self-hosting user
@@ -29,6 +31,8 @@ Feature: Self-host mode keeps working unchanged
 ```
 
 ## Feature: Cloud mode registration
+
+**Covers:** A1, A2, A4, A5, B2
 
 ```gherkin
 Feature: Cloud mode registration
@@ -58,6 +62,8 @@ Feature: Cloud mode registration
 ```
 
 ## Feature: Cloud mode login
+
+**Covers:** A1, A4, B2
 
 ```gherkin
 Feature: Cloud mode login
@@ -89,6 +95,8 @@ Feature: Cloud mode login
 
 ## Feature: Mode-agnostic sync path
 
+**Covers:** A3, A7
+
 ```gherkin
 Feature: Mode-agnostic sync path
   As the kit
@@ -111,6 +119,8 @@ Feature: Mode-agnostic sync path
 ```
 
 ## Feature: API version compatibility
+
+**Covers:** A6, B6
 
 ```gherkin
 Feature: API version compatibility between kit and Worker
@@ -167,6 +177,8 @@ Feature: Encryption is client-side in cloud mode
 
 ## Feature (@worker): Server-side tenant isolation
 
+**Covers:** B3
+
 ```gherkin
 @worker
 Feature: Server-side tenant isolation
@@ -189,6 +201,8 @@ Feature: Server-side tenant isolation
 
 ## Feature (@worker): Public registration abuse controls
 
+**Covers:** B4
+
 ```gherkin
 @worker
 Feature: Public registration abuse controls
@@ -209,6 +223,8 @@ Feature: Public registration abuse controls
 
 ## Feature (@worker): Single Worker codebase, two modes
 
+**Covers:** B1, B2
+
 ```gherkin
 @worker
 Feature: One Worker codebase serves both modes
@@ -227,4 +243,3 @@ Feature: One Worker codebase serves both modes
     Then the register and login endpoints are available
     And every request is tenant-scoped from its token
 ```
-</content>

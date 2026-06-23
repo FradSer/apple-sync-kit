@@ -29,4 +29,3 @@ REQ-TRACE-01 and RISK-02 PASS vacuously — this design uses `A#`/`B#` requireme
 `REQ-NNN`, and folds risk-handling into Rationale/Rollout/Best-Practices rather than a "Risks" heading.
 Candidate for a checklist retrospective to generalize the requirement-ID pattern and recognize risk
 content outside a literal "Risks" section.
-</content>

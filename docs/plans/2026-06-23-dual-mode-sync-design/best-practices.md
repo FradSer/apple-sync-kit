@@ -109,4 +109,3 @@ Canonical vocabulary per `_index.md`. "Kit" = this repo; "Worker" = the separate
 - **Don't over-defend.** No redundant nil/empty guards beyond what the existing code does; no
   `try?`-swallowing of auth failures; no `any`/`@unchecked` casts to bypass `Sendable`. Match the
   terse single-responsibility style of `SyncCursorPolicy` / `SyncTimestamp`.
-</content>

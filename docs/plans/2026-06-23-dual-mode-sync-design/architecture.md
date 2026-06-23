@@ -185,4 +185,3 @@ routed by token — still invisible to the kit.
 2. Worker echoes `X-AppleSyncKit-Server-Version` and adds the `CLOUD_MODE` path + auth endpoints.
 3. Kit ships `AuthClient`; consumers add `login`/`register`.
 4. Enforcement (rejecting incompatible versions) comes last, once both sides honor the header.
-</content>

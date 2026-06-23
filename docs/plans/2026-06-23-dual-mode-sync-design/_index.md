@@ -96,19 +96,20 @@ Split by repo. Only group (A) lands in `apple-sync-kit`.
   the Worker's `X-AppleSyncKit-Server-Version` response header and returns `.ok` / `.warn(message)` /
   `.unknown`. On mismatch, emit **one** non-fatal `writeStderr` warning per process; never throw.
 - **A7.** `SyncConfig` shape is **unchanged**. No `mode`, `tenant`, or `email` field.
-- **A8.** Zero `tenant`/`mode`/`cloud`/`self-host` symbols in the kit's API surface (code
-  identifiers). These concepts live only in docs/comments.
-- **A9.** Swift 6 strict-concurrency clean: `AuthClient` is an `actor`; `AuthResult`/`AuthError`/
-  `SyncVersionPolicy` are `Sendable`.
-- **A10.** Tests (XCTest, `Tests/AppleSyncKitTests/`): `AuthClient` request construction +
-  HTTPS-refusal + error mapping (offline, via an injected request-executor seam), `SyncVersionPolicy`
-  comparison matrix, a regression proving the sync path is identical regardless of token origin, and
-  a `saveConfig` round-trip asserting 0o600. Existing tests pass unmodified.
-- **A11.** Docs: `README.md`, `README.zh-CN.md`, `CLAUDE.md` describe the optional `AuthClient`, the
-  version header, and the self-host-vs-cloud framing, making explicit that the kit is mode-agnostic.
-- **A12.** BDD `.feature`-style scenarios precede implementation (captured in `bdd-specs.md` here, then
-  realized as XCTest). `swift format lint --strict` clean. No new dependency (AsyncHTTPClient is
-  already present).
+- **A8.** (non-behavioral) Zero `tenant`/`mode`/`cloud`/`self-host` symbols in the kit's API surface
+  (code identifiers). These concepts live only in docs/comments.
+- **A9.** (non-behavioral) Swift 6 strict-concurrency clean: `AuthClient` is an `actor`;
+  `AuthResult`/`AuthError`/`SyncVersionPolicy` are `Sendable`.
+- **A10.** (non-behavioral) Tests (XCTest, `Tests/AppleSyncKitTests/`): `AuthClient` request
+  construction + HTTPS-refusal + error mapping (offline, via an injected request-executor seam),
+  `SyncVersionPolicy` comparison matrix, a regression proving the sync path is identical regardless of
+  token origin, and a `saveConfig` round-trip asserting 0o600. Existing tests pass unmodified.
+- **A11.** (non-behavioral) Docs: `README.md`, `README.zh-CN.md`, `CLAUDE.md` describe the optional
+  `AuthClient`, the version header, and the self-host-vs-cloud framing, making explicit that the kit is
+  mode-agnostic.
+- **A12.** (non-behavioral) BDD `.feature`-style scenarios precede implementation (captured in
+  `bdd-specs.md` here, then realized as XCTest). `swift format lint --strict` clean. No new dependency
+  (AsyncHTTPClient is already present).
 
 ### (B) Worker — separate repo (design-only here)
 
@@ -122,15 +123,15 @@ Split by repo. Only group (A) lands in `apple-sync-kit`.
   never read/write another tenant's rows.
 - **B4.** Per-tenant quotas + abuse controls: rate-limit auth and sync endpoints; cap rows/bytes/devices;
   throttle registration (cloud mode only).
-- **B5.** Storage: shared D1 + `tenant_id` column with composite index `(tenant_id, entity, updated_at)`
-  (primary); DO-per-tenant SQLite as a documented escape hatch. Keep `MAX_BATCH_SIZE` in lockstep with
-  the kit's `maxBatchSize = 500`.
+- **B5.** (non-behavioral) Storage: shared D1 + `tenant_id` column with composite index
+  `(tenant_id, entity, updated_at)` (primary); DO-per-tenant SQLite as a documented escape hatch. Keep
+  `MAX_BATCH_SIZE` in lockstep with the kit's `maxBatchSize = 500`.
 - **B6.** Read `X-AppleSyncKit-Version`; echo `X-AppleSyncKit-Server-Version`; reject/ignore by policy.
   A Worker ignoring an unknown request header stays backward-compatible (header ships first, enforcement
   later).
-- **B7.** Passwords hashed with a memory-hard KDF (argon2id preferred; scrypt/PBKDF2-via-WebCrypto as
-  the Workers-runtime-pragmatic fallback). Tokens stored only as `SHA-256(token)`. The Worker never
-  holds plaintext user data or the encryption key.
+- **B7.** (non-behavioral) Passwords hashed with a memory-hard KDF (argon2id preferred;
+  scrypt/PBKDF2-via-WebCrypto as the Workers-runtime-pragmatic fallback). Tokens stored only as
+  `SHA-256(token)`. The Worker never holds plaintext user data or the encryption key.
 
 ## Rationale
 
@@ -166,6 +167,32 @@ See the companion documents. In brief:
 - **Consumers (`note`, `event`):** add a `login`/`register` subcommand beside the existing `config`
   command in their `SharedSyncCommands`; reuse `SyncConfigStore.save`. No other consumer change.
 
+## Risks
+
+- **Risk:** Operator burden — running a multi-tenant Worker makes the author an operator (uptime, D1
+  limits, abuse response).
+  **Mitigation:** the single-codebase `CLOUD_MODE` toggle (B1) keeps cloud mode optional and lets the
+  author run single-tenant first; cap exposure with the per-tenant quotas in B4. *Assumption:*
+  personal/small-group scale, so Cloudflare D1 free/cheap tiers suffice.
+- **Risk:** Open registration invites spam accounts and storage abuse.
+  **Mitigation:** rate-limit registration/login per IP and per email, enforce per-tenant row/byte/device
+  quotas, and throttle registration (B4) — Worker-side only, never leaked into the kit.
+- **Risk:** Key-UX bottleneck — even with frictionless cloud auth, every device must still manually
+  generate and export the base64 encryption key, so users may expect cloud mode to "just work."
+  **Mitigation:** document the per-device key-export step in onboarding copy; track passphrase-derived
+  key as a deferred follow-up (see Scope/Deferred) rather than weakening the zero-knowledge property.
+- **Risk:** Version drift between self-host Workers and the kit.
+  **Mitigation:** ship the `X-AppleSyncKit-Version` request header first (old Workers ignore unknown
+  headers, so it is backward-compatible) and add Worker-side enforcement later — the rollout ordering in
+  `architecture.md` makes this explicit; mismatches warn non-fatally, never block sync.
+- **Risk:** `maxBatchSize` / `MAX_BATCH_SIZE` coupling is amplified by multi-tenant storage refactors.
+  **Mitigation:** carry the existing invariant comment into the Worker schema work and assert batch size
+  parity in Worker tests. *Assumption:* the cloud Worker keeps 500.
+- **Risk:** The auth endpoint contract (`POST /api/v1/auth/{register,login}` → `{token}`) is assumed,
+  not yet pinned with the Worker repo.
+  **Mitigation:** pin this contract as the first kit/Worker co-design item before implementing
+  `AuthClient`, so the single integration point is fixed up front.
+
 ## Design Documents
 
 - [`architecture.md`](architecture.md) — system overview, components, data structures, integration
@@ -174,5 +201,3 @@ See the companion documents. In brief:
   mode-agnostic sync, version compatibility, E2E-in-cloud, `@worker` tenant isolation + abuse).
 - [`best-practices.md`](best-practices.md) — security (E2E invariant, token handling, tenant
   isolation, auth hardening, abuse), performance, code quality, and pitfalls to avoid.
-</content>
-</invoke>
