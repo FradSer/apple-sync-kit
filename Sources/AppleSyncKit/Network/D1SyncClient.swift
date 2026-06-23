@@ -26,6 +26,15 @@ public actor D1SyncClient {
     value.addingPercentEncoding(withAllowedCharacters: queryValueAllowed) ?? value
   }
 
+  /// `urlPathAllowed` minus `/` so a record id stays a single path segment. Note
+  /// ids are `x-coredata://…/ICNote/p123`; leaving the slashes unescaped splits
+  /// them into extra path segments and the Worker's `:id` route 404s.
+  private static let pathSegmentAllowed: CharacterSet = {
+    var set = CharacterSet.urlPathAllowed
+    set.remove(charactersIn: "/")
+    return set
+  }()
+
   public init(config: SyncConfig) {
     self.config = config
     self.httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
@@ -112,7 +121,7 @@ public actor D1SyncClient {
   // MARK: - Delete
 
   public func delete(entity: String, id: String, lastModified: String?) async throws {
-    let encodedId = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+    let encodedId = id.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed) ?? id
     var httpRequest = HTTPClientRequest(url: "\(config.apiURL)/api/v1/\(entity)/\(encodedId)")
     httpRequest.method = .DELETE
     httpRequest.headers.add(name: "Authorization", value: "Bearer \(config.apiToken)")

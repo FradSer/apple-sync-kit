@@ -237,7 +237,7 @@ public enum SyncEngine {
           } catch let error where isNotFound(error) {
             // Already gone locally; clean up mapping.
           } catch {
-            fputs("Warning: Could not delete \(entityName) \(item.id): \(error)\n", stderr)
+            writeStderr("Warning: Could not delete \(entityName) \(item.id): \(error)\n")
             hadFailures = true
             continue
           }
@@ -248,9 +248,9 @@ public enum SyncEngine {
         }
 
         if localIdsWithoutTimestamp.contains(localId) {
-          fputs(
-            "Skipped \(entityName) \(item.id): local copy has no timestamp for conflict comparison\n",
-            stderr)
+          writeStderr(
+            "Skipped \(entityName) \(item.id): local copy has no timestamp for conflict comparison\n"
+          )
           skipped += 1
           continue
         }
@@ -260,9 +260,9 @@ public enum SyncEngine {
           let serverModified = SyncTimestamp.parse(item.lastModified),
           localModified > serverModified
         {
-          fputs(
-            "Skipped \(entityName) \(item.id): local copy is newer; it will be pushed on next sync\n",
-            stderr)
+          writeStderr(
+            "Skipped \(entityName) \(item.id): local copy is newer; it will be pushed on next sync\n"
+          )
           skipped += 1
           continue
         }
@@ -280,7 +280,7 @@ public enum SyncEngine {
           recordExtra?(&entityState, item)
           pulled += 1
         } catch {
-          fputs("Warning: Could not sync \(entityName) \(item.id): \(error)\n", stderr)
+          writeStderr("Warning: Could not sync \(entityName) \(item.id): \(error)\n")
           hadFailures = true
         }
       }
@@ -315,9 +315,9 @@ public enum SyncEngine {
   private static func invert(_ mapping: [String: String]) -> [String: String] {
     let result = SyncMapping.inverted(mapping)
     for collision in result.collisions {
-      fputs(
+      writeStderr(
         "Warning: duplicate ID mapping -- local '\(collision.localId)' maps to both "
-          + "'\(collision.keptRemoteId)' and '\(collision.droppedRemoteId)'\n", stderr)
+          + "'\(collision.keptRemoteId)' and '\(collision.droppedRemoteId)'\n")
     }
     return result.mapping
   }

@@ -40,6 +40,23 @@ public struct SyncEntityState: Codable, Sendable, Equatable {
     self.dateRangeByRemoteId = dateRangeByRemoteId
   }
 
+  // Decodes each field independently with a default, so state files written before
+  // a field existed still load. Notes never wrote `dateRangeByRemoteId` (no
+  // calendar windowing); requiring it would strand their existing state.json. The
+  // synthesized decoder can't do this -- it demands every non-optional key.
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.knownRemoteIds =
+      try container.decodeIfPresent(Set<String>.self, forKey: .knownRemoteIds) ?? []
+    self.lastModifiedByRemoteId =
+      try container.decodeIfPresent([String: String].self, forKey: .lastModifiedByRemoteId) ?? [:]
+    self.snapshotsByRemoteId =
+      try container.decodeIfPresent([String: String].self, forKey: .snapshotsByRemoteId) ?? [:]
+    self.dateRangeByRemoteId =
+      try container.decodeIfPresent([String: SyncDateRange].self, forKey: .dateRangeByRemoteId)
+      ?? [:]
+  }
+
   public func deletionCandidates(currentRemoteIds: Set<String>) -> [String] {
     knownRemoteIds.subtracting(currentRemoteIds).sorted()
   }

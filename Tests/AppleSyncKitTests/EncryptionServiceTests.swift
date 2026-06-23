@@ -1,12 +1,12 @@
 import XCTest
 
+@testable import AppleSyncKit
+
 #if canImport(CryptoKit)
   import CryptoKit
 #else
   import Crypto
 #endif
-
-@testable import AppleSyncKit
 
 private struct Payload: Codable, Equatable {
   let body: String
@@ -18,7 +18,8 @@ final class EncryptionServiceTests: XCTestCase {
   func testEncryptDecryptRoundTrip() async throws {
     let service = EncryptionService(key: makeKey())
     let payload = Payload(body: "# Secret\n\nbackup code 1234")
-    let sealed = try await service.encrypt(payload, recordId: "n1", modifiedDate: "2026-03-10T10:00:00Z")
+    let sealed = try await service.encrypt(
+      payload, recordId: "n1", modifiedDate: "2026-03-10T10:00:00Z")
     XCTAssertFalse(sealed.encryptedPayload.isEmpty)
     let opened: Payload = try await service.decrypt(
       sealed.encryptedPayload, iv: sealed.encryptedIV, recordId: "n1",
@@ -41,7 +42,8 @@ final class EncryptionServiceTests: XCTestCase {
 
   func testTamperedAADFailsToDecrypt() async throws {
     let service = EncryptionService(key: makeKey())
-    let sealed = try await service.encrypt(Payload(body: "secret"), recordId: "n1", modifiedDate: "d1")
+    let sealed = try await service.encrypt(
+      Payload(body: "secret"), recordId: "n1", modifiedDate: "d1")
     do {
       let _: Payload = try await service.decrypt(
         sealed.encryptedPayload, iv: sealed.encryptedIV, recordId: "n1", modifiedDate: "d2")

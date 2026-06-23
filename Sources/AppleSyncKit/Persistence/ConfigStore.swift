@@ -126,7 +126,7 @@ public struct ConfigStore: Sendable {
     do {
       return try JSONDecoder().decode(T.self, from: data)
     } catch {
-      fputs("Warning: Could not parse \(path): \(error.localizedDescription)\n", stderr)
+      writeStderr("Warning: Could not parse \(path): \(error.localizedDescription)\n")
       return defaultValue
     }
   }

@@ -33,7 +33,8 @@ final class SyncModelsTests: XCTestCase {
     let base = Item(id: "a", title: "T", body: "b", modifiedDate: "2026-01-02")
     let other = Item(id: "z", title: "T", body: "b", modifiedDate: "2030-10-10")
     var state = SyncEntityState()
-    try state.recordSyncedValue(base, remoteId: "remote", lastModified: "2026-01-02", volatileKeys: volatile)
+    try state.recordSyncedValue(
+      base, remoteId: "remote", lastModified: "2026-01-02", volatileKeys: volatile)
     let unchanged = try state.lastModified(
       for: other, remoteId: "remote", fallback: "FALLBACK", volatileKeys: volatile)
     XCTAssertEqual(unchanged, "2026-01-02")
@@ -43,7 +44,8 @@ final class SyncModelsTests: XCTestCase {
     let base = Item(id: "a", title: "T", body: "b", modifiedDate: nil)
     let changed = Item(id: "a", title: "T", body: "DIFFERENT", modifiedDate: nil)
     var state = SyncEntityState()
-    try state.recordSyncedValue(base, remoteId: "remote", lastModified: "2026-01-02", volatileKeys: volatile)
+    try state.recordSyncedValue(
+      base, remoteId: "remote", lastModified: "2026-01-02", volatileKeys: volatile)
     let result = try state.lastModified(
       for: changed, remoteId: "remote", fallback: "FALLBACK", volatileKeys: volatile)
     XCTAssertEqual(result, "FALLBACK")
@@ -55,6 +57,26 @@ final class SyncModelsTests: XCTestCase {
     state.recordKnownRemoteId("r2")
     state.recordKnownRemoteId("r3")
     XCTAssertEqual(state.deletionCandidates(currentRemoteIds: ["r1", "r3"]), ["r2"])
+  }
+
+  func testDecodesLegacyStateWithoutDateRange() throws {
+    // State written before `dateRangeByRemoteId` existed (e.g. note's pre-kit
+    // state.json) must still decode -- the missing key defaults to empty.
+    let legacy = """
+      {"knownRemoteIds":["r1"],"lastModifiedByRemoteId":{"r1":"2026-01-01"},\
+      "snapshotsByRemoteId":{"r1":"{}"}}
+      """
+    let state = try JSONDecoder().decode(
+      SyncEntityState.self, from: Data(legacy.utf8))
+    XCTAssertEqual(state.knownRemoteIds, ["r1"])
+    XCTAssertEqual(state.lastModifiedByRemoteId["r1"], "2026-01-01")
+    XCTAssertTrue(state.dateRangeByRemoteId.isEmpty)
+  }
+
+  func testDecodesEmptyStateObject() throws {
+    let state = try JSONDecoder().decode(SyncEntityState.self, from: Data("{}".utf8))
+    XCTAssertTrue(state.knownRemoteIds.isEmpty)
+    XCTAssertTrue(state.dateRangeByRemoteId.isEmpty)
   }
 
   // MARK: - Timestamp parsing
