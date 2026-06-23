@@ -41,6 +41,17 @@ The engine offers two push strategies and one pull:
 | **Persistence** | JSON state under `~/.config/<namespace>/`, exclusive `flock`, atomic 0o600 writes |
 | **SQLite** | Generic row helpers for local sync; `Connection: @unchecked Sendable` extension |
 
+### Consumers
+
+| CLI | Entities | Repository |
+|---|---|---|
+| [note](https://github.com/FradSer/note) | Apple Notes (notes, folders) | `git@github.com:FradSer/note.git` |
+| [event](https://github.com/FradSer/event) | Apple Reminders & Calendar (reminders, calendar events, lists) | `git@github.com:FradSer/event.git` |
+
+Both CLIs consume the Swift library via `AppleSyncKit` and deploy the shared
+[canonical Worker](worker/) against their own D1 database. The Worker is
+entity-agnostic — the table set is driven by the `ENTITIES` wrangler var.
+
 ## Installation
 
 Add to your `Package.swift`:

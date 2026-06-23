@@ -41,6 +41,16 @@ SQLiteSyncStore（本地数据库）
 | **Persistence** | `~/.config/<namespace>/` 下的 JSON 状态，独占 `flock`，原子 0o600 写入 |
 | **SQLite** | 本地同步的通用行辅助方法；`Connection: @unchecked Sendable` 扩展 |
 
+### 消费方
+
+| CLI | 实体 | 仓库 |
+|---|---|---|
+| [note](https://github.com/FradSer/note) | Apple Notes（笔记、文件夹） | `git@github.com:FradSer/note.git` |
+| [event](https://github.com/FradSer/event) | Apple 提醒事项与日历（提醒、日历事件、列表） | `git@github.com:FradSer/event.git` |
+
+两个 CLI 都通过 `AppleSyncKit` 消费 Swift 库，并各自部署 [canonical Worker](worker/)
+到自己的 D1 数据库。Worker 与实体无关——表集由 `ENTITIES` wrangler var 驱动。
+
 ## 安装
 
 在你的 `Package.swift` 中添加：
