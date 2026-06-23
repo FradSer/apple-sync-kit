@@ -8,10 +8,8 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
-    "db:migrate:notes": "wrangler d1 migrations apply apple-sync --local --migrations-dir migrations/notes",
-    "db:migrate:events": "wrangler d1 migrations apply apple-sync --local --migrations-dir migrations/events",
-    "db:migrate:notes:remote": "wrangler d1 migrations apply apple-sync --remote --migrations-dir migrations/notes",
-    "db:migrate:events:remote": "wrangler d1 migrations apply apple-sync --remote --migrations-dir migrations/events"
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "hono": "^4.12.26"

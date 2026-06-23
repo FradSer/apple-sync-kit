@@ -49,17 +49,19 @@ wrangler secret put API_TOKEN
 
 ### 3. Apply migrations
 
-For a single entity set, with `migrations_dir` pointing at the right directory:
+`wrangler d1 migrations apply` reads `migrations_dir` from `wrangler.toml`, so
+set that to match your usage before running:
 
 ```sh
 pnpm install
-pnpm run db:migrate:notes            # or db:migrate:events, applies locally
-pnpm run db:migrate:notes:remote     # :remote variant applies to production D1
+pnpm run db:migrate            # applies locally; reads migrations_dir from wrangler.toml
+pnpm run db:migrate:remote     # :remote variant applies to production D1
 ```
 
-For **both** entity sets in one D1: apply the notes set first, then switch
-`migrations_dir` to `migrations/events` (or run `db:migrate:events`), then apply
-the events set. Both sets are independent and safe to apply in either order.
+For **both** entity sets in one D1: set `migrations_dir = "migrations/notes"`,
+run `db:migrate:remote`, then change `migrations_dir` to `"migrations/events"`
+and run `db:migrate:remote` again. Both sets are independent and safe to apply in
+either order.
 
 ### 4. Deploy
 
