@@ -12,9 +12,11 @@ private struct Payload: Codable, Equatable {
   let body: String
 }
 
-final class EncryptionServiceTests: XCTestCase {
-  private func makeKey() -> SymmetricKey { SymmetricKey(size: .bits256) }
+// File-scope (not an instance method) so async tests don't capture the
+// non-Sendable XCTestCase `self` -- which Swift 6.2 on Linux rejects as a data race.
+private func makeKey() -> SymmetricKey { SymmetricKey(size: .bits256) }
 
+final class EncryptionServiceTests: XCTestCase {
   func testEncryptDecryptRoundTrip() async throws {
     let service = EncryptionService(key: makeKey())
     let payload = Payload(body: "# Secret\n\nbackup code 1234")
