@@ -48,8 +48,10 @@ SQLiteSyncStore（本地数据库）
 | [note](https://github.com/FradSer/note) | Apple Notes（笔记、文件夹） | `git@github.com:FradSer/note.git` |
 | [event](https://github.com/FradSer/event) | Apple 提醒事项与日历（提醒、日历事件、列表） | `git@github.com:FradSer/event.git` |
 
-两个 CLI 都通过 `AppleSyncKit` 消费 Swift 库，并各自部署 [canonical Worker](worker/)
-到自己的 D1 数据库。Worker 与实体无关——表集由 `ENTITIES` wrangler var 驱动。
+两个 CLI 都通过 `AppleSyncKit` 消费 Swift 库，并共用 [canonical Worker](worker/)。
+Worker 与实体无关——表集由 `ENTITIES` wrangler var 驱动——因此推荐的部署方式是
+**一个 Worker、一个 D1 承载全部五张表**，两个 CLI 指向同一个 URL 和 token（加密密钥
+保持各自独立）。单实体部署仍然支持。
 
 ## 安装
 

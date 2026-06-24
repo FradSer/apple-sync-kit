@@ -2,9 +2,10 @@
 
 The canonical Cloudflare D1 sync Worker shared by the `note` and `event` CLIs.
 It is **entity-agnostic**: a single deployment serves whichever tables you
-declare in the `ENTITIES` wrangler var. One Worker, one D1, any combination of
-notes and/or events — each consumer still deploys its own instance and never
-depends on the other.
+declare in the `ENTITIES` wrangler var. The recommended setup is **one Worker
+and one D1 serving every table**, with both CLIs pointed at the same URL and
+token (encryption keys stay independent — the Worker only stores opaque blobs).
+A single-entity deployment is still supported as a variant.
 
 ## What it does
 
@@ -32,13 +33,14 @@ wrangler d1 create apple-sync
 ### 2. Configure
 
 Copy `wrangler.toml.example` to `wrangler.toml` and fill in your `database_id`.
-Pick the `ENTITIES` value for your usage:
+The example defaults to the shared setup; pick the `ENTITIES` value and matching
+`migrations_dir` for your usage:
 
 | You use | `ENTITIES` | `migrations_dir` |
 |---|---|---|
+| both (recommended) | `notes,note_folders,reminders,calendar_events,reminder_lists` | `migrations/all` |
 | note only | `notes,note_folders` | `migrations/notes` |
 | event only | `reminders,calendar_events,reminder_lists` | `migrations/events` |
-| both | `notes,note_folders,reminders,calendar_events,reminder_lists` | both (see below) |
 
 Set the auth token as a secret:
 
@@ -58,10 +60,9 @@ pnpm run db:migrate            # applies locally; reads migrations_dir from wran
 pnpm run db:migrate:remote     # :remote variant applies to production D1
 ```
 
-For **both** entity sets in one D1: set `migrations_dir = "migrations/notes"`,
-run `db:migrate:remote`, then change `migrations_dir` to `"migrations/events"`
-and run `db:migrate:remote` again. Both sets are independent and safe to apply in
-either order.
+The default `migrations/all` creates every table in one pass. (`migrations/all`
+is just the per-entity files renumbered into one sequence; the `migrations/notes`
+and `migrations/events` directories remain for single-entity deployments.)
 
 ### 4. Deploy
 
@@ -69,13 +70,16 @@ either order.
 pnpm run deploy
 ```
 
-Point your CLI at the deployed URL (env-first, then config file):
+Point both CLIs at the deployed URL (env-first, then config file). For the shared
+Worker, `NOTE_SYNC_API_URL` and `EVENT_SYNC_API_URL` are the same URL, and
+`NOTE_SYNC_API_TOKEN` and `EVENT_SYNC_API_TOKEN` are the same token; the
+encryption keys stay independent:
 
 ```sh
 # note
 NOTE_SYNC_API_URL=https://<your-worker>.workers.dev NOTE_SYNC_API_TOKEN=<token> \
   NOTE_SYNC_DEVICE_ID=<machine-name> .build/debug/note sync config ...
-# event
+# event (same URL + token)
 EVENT_SYNC_API_URL=https://<your-worker>.workers.dev EVENT_SYNC_API_TOKEN=<token> \
   EVENT_SYNC_DEVICE_ID=<machine-name> .build/debug/event sync config ...
 ```

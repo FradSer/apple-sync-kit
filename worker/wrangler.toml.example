@@ -2,23 +2,25 @@ name = "apple-sync-api"                 # your deployment name
 main = "src/index.ts"
 compatibility_date = "2026-03-01"
 
-# The set of tables this deployment serves. Pick one:
-#   notes only            -> "notes,note_folders"
-#   events only           -> "reminders,calendar_events,reminder_lists"
-#   both (single D1)      -> "notes,note_folders,reminders,calendar_events,reminder_lists"
+# The set of tables this deployment serves. The recommended setup is ONE shared
+# Worker + ONE D1 serving every table, with both the `note` and `event` CLIs
+# pointed at the same URL and token (encryption keys stay independent):
+#   both (recommended) -> "notes,note_folders,reminders,calendar_events,reminder_lists"  (migrations_dir = "migrations/all")
+#   notes only         -> "notes,note_folders"                                           (migrations_dir = "migrations/notes")
+#   events only        -> "reminders,calendar_events,reminder_lists"                     (migrations_dir = "migrations/events")
 [vars]
-ENTITIES = "notes,note_folders"
+ENTITIES = "notes,note_folders,reminders,calendar_events,reminder_lists"
 
-# The Worker is shared across all deployments; only this database binding and
-# the migrations_dir differ per consumer. Point migrations_dir at the set(s)
-# you configured above. For "both", apply the notes migrations first (set
-# migrations_dir = "migrations/notes", run db:migrate:notes), then switch to
-# "migrations/events" and run db:migrate:events.
+# The Worker is entity-agnostic; only this database binding and the
+# migrations_dir differ per deployment. `migrations/all` creates every table in
+# one pass (`pnpm run db:migrate:remote`). For a single-entity deployment,
+# narrow ENTITIES above and point migrations_dir at "migrations/notes" or
+# "migrations/events" instead.
 [[d1_databases]]
 binding = "DB"
 database_name = "apple-sync"             # your D1 database name
 database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
-migrations_dir = "migrations/notes"
+migrations_dir = "migrations/all"
 
 # Daily purge of soft-deleted records older than 30 days.
 [triggers]

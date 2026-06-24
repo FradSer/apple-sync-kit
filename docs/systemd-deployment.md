@@ -28,6 +28,20 @@ NOTE_ENCRYPTION_KEY=<base64 key> \
 | `note`  | `NOTE_`  | `note-sync`  |
 | `event` | `EVENT_` | `event-sync` |
 
+Running **both** CLIs in one service (e.g. an agent gateway that uses note and
+event) against the shared Worker: run the script once per CLI. Each writes its
+own env file and drop-in (`note-sync.conf`, `event-sync.conf`), so they coexist.
+Point both at the same `*_SYNC_API_URL` and `*_SYNC_API_TOKEN`; the encryption
+keys (`NOTE_ENCRYPTION_KEY` / `EVENT_ENCRYPTION_KEY`) must each be identical to
+the value used on your other devices, but the two CLIs do not share a key.
+
+```bash
+NOTE_SYNC_API_URL=https://<worker>.workers.dev NOTE_SYNC_API_TOKEN=<token> \
+NOTE_ENCRYPTION_KEY=<note key> ./deploy-systemd.sh note openclaw-gateway
+EVENT_SYNC_API_URL=https://<worker>.workers.dev EVENT_SYNC_API_TOKEN=<token> \
+EVENT_ENCRYPTION_KEY=<event key> ./deploy-systemd.sh event openclaw-gateway
+```
+
 To redeploy on a host that is already configured, source the existing env file
 first:
 
