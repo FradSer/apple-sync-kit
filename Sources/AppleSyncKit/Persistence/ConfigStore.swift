@@ -130,7 +130,9 @@ public struct ConfigStore: Sendable {
     // Only warn when env config loads successfully — a non-HTTPS env URL would
     // make loadFromEnvironment throw on the next load, so env would NOT win.
     guard (try? loadFromEnvironment(environment)) != nil else { return nil }
-    return "Note: \(apiURLEnvKey)/\(apiTokenEnvKey) are set in the environment and will take precedence over \(configPath)."
+    return
+      "Note: \(apiURLEnvKey)/\(apiTokenEnvKey) are set in the environment"
+      + " and will take precedence over \(configPath)."
   }
 
   // MARK: - Generic JSON helpers
