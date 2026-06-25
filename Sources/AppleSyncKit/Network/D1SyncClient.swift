@@ -45,6 +45,25 @@ public actor D1SyncClient {
     try await httpClient.shutdown()
   }
 
+  /// Creates a client from `config`, runs `body`, and guarantees `shutdown()` —
+  /// even if `body` throws before making any request. Prefer this over
+  /// constructing `D1SyncClient` directly so the underlying HTTPClient is never
+  /// leaked (its `deinit` fatals if not shut down).
+  public static func withClient<R>(
+    config: SyncConfig,
+    _ body: @Sendable (D1SyncClient) async throws -> R
+  ) async throws -> R {
+    let client = D1SyncClient(config: config)
+    do {
+      let result = try await body(client)
+      try await client.shutdown()
+      return result
+    } catch {
+      try? await client.shutdown()
+      throw error
+    }
+  }
+
   // MARK: - Push
 
   /// Batch upsert `items` to `entity`. `id` extracts each record's local id;

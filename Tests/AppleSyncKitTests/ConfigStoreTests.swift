@@ -40,4 +40,30 @@ final class ConfigStoreTests: XCTestCase {
     XCTAssertNoThrow(try store.validateAPIURL("https://ok.dev"))
     XCTAssertThrowsError(try store.validateAPIURL("ftp://nope.dev"))
   }
+
+  func testEnvOverrideNoticePresentWhenEnvSet() {
+    let env = [
+      "NOTE_SYNC_API_URL": "https://example.workers.dev",
+      "NOTE_SYNC_API_TOKEN": "tok",
+    ]
+    let notice = store.envOverrideNotice(env)
+    XCTAssertNotNil(notice)
+    XCTAssertTrue(notice?.contains("NOTE_SYNC_API_URL") == true)
+    XCTAssertTrue(notice?.contains("NOTE_SYNC_API_TOKEN") == true)
+  }
+
+  func testEnvOverrideNoticeAbsentWhenEnvUnset() {
+    XCTAssertNil(store.envOverrideNotice([:]))
+  }
+
+  func testEnvOverrideNoticeAbsentWhenOnlyOneSet() {
+    XCTAssertNil(store.envOverrideNotice(["NOTE_SYNC_API_URL": "https://x.dev"]))
+  }
+
+  func testEnvOverrideNoticeAbsentWhenEnvURLNonHTTPS() {
+    // Both vars set but env URL is non-HTTPS: loadFromEnvironment would throw
+    // on the next load, so env would NOT take precedence — no notice.
+    let env = ["NOTE_SYNC_API_URL": "http://insecure.dev", "NOTE_SYNC_API_TOKEN": "tok"]
+    XCTAssertNil(store.envOverrideNotice(env))
+  }
 }

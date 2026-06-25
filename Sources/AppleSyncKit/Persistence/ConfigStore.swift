@@ -115,6 +115,22 @@ public struct ConfigStore: Sendable {
   public func saveConfig(_ config: SyncConfig) throws {
     try validateAPIURL(config.apiURL)
     try saveJSON(config, to: configPath)
+    if let notice = envOverrideNotice() {
+      writeStderr(notice + "\n")
+    }
+  }
+
+  /// Returns a notice when environment variables are set AND would actually
+  /// take precedence over the config file just saved (i.e. `loadFromEnvironment`
+  /// succeeds — both required vars present and the URL is valid HTTPS). `nil`
+  /// otherwise. Pure for testability (defaults to the live environment).
+  public func envOverrideNotice(
+    _ environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
+    // Only warn when env config loads successfully — a non-HTTPS env URL would
+    // make loadFromEnvironment throw on the next load, so env would NOT win.
+    guard (try? loadFromEnvironment(environment)) != nil else { return nil }
+    return "Note: \(apiURLEnvKey)/\(apiTokenEnvKey) are set in the environment and will take precedence over \(configPath)."
   }
 
   // MARK: - Generic JSON helpers
