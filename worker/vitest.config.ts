@@ -2,11 +2,11 @@ import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-worker
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(async () => {
-  // Resolved relative to the worker directory, where Vitest loads this config.
-  // Load both entity migrations so a single test D1 can serve notes *and*
-  // events tables (the dual-use deployment shape).
-  const notes = await readD1Migrations("./migrations/notes");
-  const events = await readD1Migrations("./migrations/events");
+  // The kit ships NO business migrations. Tests exercise the entity-agnostic
+  // runtime against a single synthetic fixture table (kit_test_items) so they
+  // never depend on any consumer's business schema. Consumer repos own their
+  // real migrations and run their own worker tests.
+  const fixtures = await readD1Migrations("./test/fixtures/migrations");
 
   return {
     plugins: [
@@ -15,7 +15,7 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             API_TOKEN: "test-token",
-            TEST_MIGRATIONS: [...notes, ...events],
+            TEST_MIGRATIONS: fixtures,
           },
         },
       }),

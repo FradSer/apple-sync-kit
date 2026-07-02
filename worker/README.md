@@ -5,7 +5,10 @@ It is **entity-agnostic**: a single deployment serves whichever tables you
 declare in the `ENTITIES` wrangler var. The recommended setup is **one Worker
 and one D1 serving every table**, with both CLIs pointed at the same URL and
 token (encryption keys stay independent — the Worker only stores opaque blobs).
-A single-entity deployment is still supported as a variant.
+
+The kit ships **no business migrations**. Each consumer CLI owns its own table
+schemas and the SQL migrations that create them; the Worker only provides the
+runtime. Point `migrations_dir` at the consumer repo's migration directory.
 
 ## What it does
 
@@ -33,14 +36,23 @@ wrangler d1 create apple-sync
 ### 2. Configure
 
 Copy `wrangler.toml.example` to `wrangler.toml` and fill in your `database_id`.
-The example defaults to the shared setup; pick the `ENTITIES` value and matching
-`migrations_dir` for your usage:
+Set `ENTITIES` to the comma-separated table list your consumers use, and point
+`migrations_dir` at the consumer repo's migration directory (the kit does not
+provide migrations):
+
+Migrations live in the consumer repo. For example, `note` ships its schemas
+(`notes`, `note_folders`, `note_preferences`) under
+`skills/apple-notes/references/migrations/`; `event` ships its own. For a shared
+note + event D1, merge both consumers' migration directories into one
+`migrations_dir` (namespaced filenames like `0001_note_*`, `0001_event_*` avoid
+collisions in D1's `d1_migrations` table) and list every entity in `ENTITIES`.
+See each consumer's cloud-sync docs for the merge procedure.
 
 | You use | `ENTITIES` | `migrations_dir` |
 |---|---|---|
-| both (recommended) | `notes,note_folders,reminders,calendar_events,reminder_lists` | `migrations/all` |
-| note only | `notes,note_folders` | `migrations/notes` |
-| event only | `reminders,calendar_events,reminder_lists` | `migrations/events` |
+| note only | `notes,note_folders,note_preferences` | note's `references/migrations` |
+| event only | `reminders,calendar_events,reminder_lists` | event's migrations dir |
+| both (shared D1) | all of the above | merged dir (see consumer docs) |
 
 Set the auth token as a secret:
 
@@ -51,18 +63,15 @@ wrangler secret put API_TOKEN
 
 ### 3. Apply migrations
 
-`wrangler d1 migrations apply` reads `migrations_dir` from `wrangler.toml`, so
-set that to match your usage before running:
+`wrangler d1 migrations apply` reads `migrations_dir` from `wrangler.toml`. Run
+it from the consumer repo that owns the migrations, or from this Worker dir if
+your `wrangler.toml` points `migrations_dir` at the consumer path:
 
 ```sh
 pnpm install
 pnpm run db:migrate            # applies locally; reads migrations_dir from wrangler.toml
 pnpm run db:migrate:remote     # :remote variant applies to production D1
 ```
-
-The default `migrations/all` creates every table in one pass. (`migrations/all`
-is just the per-entity files renumbered into one sequence; the `migrations/notes`
-and `migrations/events` directories remain for single-entity deployments.)
 
 ### 4. Deploy
 

@@ -2,25 +2,30 @@ name = "apple-sync-api"                 # your deployment name
 main = "src/index.ts"
 compatibility_date = "2026-03-01"
 
-# The set of tables this deployment serves. The recommended setup is ONE shared
-# Worker + ONE D1 serving every table, with both the `note` and `event` CLIs
-# pointed at the same URL and token (encryption keys stay independent):
-#   both (recommended) -> "notes,note_folders,reminders,calendar_events,reminder_lists"  (migrations_dir = "migrations/all")
-#   notes only         -> "notes,note_folders"                                           (migrations_dir = "migrations/notes")
-#   events only        -> "reminders,calendar_events,reminder_lists"                     (migrations_dir = "migrations/events")
+# The Worker is entity-agnostic: it serves exactly the tables listed in
+# ENTITIES (validated against ^[a-z_][a-z0-9_]*$). The kit ships NO business
+# migrations — each consumer CLI owns its own table schemas and migrations.
+# Configure ENTITIES and migrations_dir to point at the consumer repo's
+# migration directory.
+#
+# Example (note CLI — see note's skills/apple-notes/references/):
+#   ENTITIES        = "notes,note_folders,note_preferences"
+#   migrations_dir  = "<path-to-note>/skills/apple-notes/references/migrations"
+#
+# Shared note + event deployment: merge both consumers' migration directories
+# into one dir (namespaced filenames like 0001_note_*, 0001_event_* avoid
+# collisions in D1's d1_migrations table) and list every entity in ENTITIES.
+# See each consumer's cloud-sync docs for the merge procedure.
 [vars]
-ENTITIES = "notes,note_folders,reminders,calendar_events,reminder_lists"
+ENTITIES = "notes,note_folders,note_preferences"
 
-# The Worker is entity-agnostic; only this database binding and the
-# migrations_dir differ per deployment. `migrations/all` creates every table in
-# one pass (`pnpm run db:migrate:remote`). For a single-entity deployment,
-# narrow ENTITIES above and point migrations_dir at "migrations/notes" or
-# "migrations/events" instead.
+# Point this at the consumer repo's migration directory (the one whose CREATE
+# TABLE statements match the entities above). The kit does not provide it.
 [[d1_databases]]
 binding = "DB"
 database_name = "apple-sync"             # your D1 database name
 database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
-migrations_dir = "migrations/all"
+migrations_dir = "REPLACE_WITH_CONSUMER_MIGRATIONS_DIR"
 
 # Daily purge of soft-deleted records older than 30 days.
 [triggers]
