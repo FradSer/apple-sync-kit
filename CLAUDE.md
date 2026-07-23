@@ -32,6 +32,7 @@ Dependencies point inward; the kit has no composition root (wiring is the consum
 - **`Persistence/ConfigStore.swift`** — JSON state under `~/.config/<namespace>/`, mode 0o600 via atomic rename, guarded by an exclusive `flock`. Use `loadJSONStrict` for state/id-mapping (throws on corruption — never silently reset) and `loadJSON` for cursors (rebuildable — warns and returns default).
 - **`Crypto/EncryptionService.swift`** (`actor`) — AES-GCM over any `Codable` payload, binding `recordId|modifiedDate` as AAD.
 - **`SQLite/SQLiteSyncStore.swift`** — generic JSON-blob row helpers; each entity is one table with `data`/`deleted`/`is_local_only` columns.
+- **`Daemon/LaunchAgentManager.swift`** (macOS-only, `#if os(macOS)`) — renders/installs/inspects per-user launchd agents for background sync. Entity-agnostic: the consumer supplies the label, program arguments, and environment (encryption key included — launchd jobs don't inherit shell env). Lock contention surfaces as `SyncError.alreadyRunning` so a daemon-triggered run can skip quietly.
 - Public value types live in `Models/`; `DTO/` holds internal wire types (`RawJSON`/`JSONValue` preserve server bytes without an `AnyCodable` dependency).
 
 ## Configuration (consumer-facing)

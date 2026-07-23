@@ -45,7 +45,7 @@ public struct ConfigStore: Sendable {
     }
     guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
       close(fd)
-      throw SyncError.unknown("Another sync operation is already running")
+      throw SyncError.alreadyRunning
     }
     return fd
   }

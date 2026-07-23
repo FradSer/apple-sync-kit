@@ -8,6 +8,9 @@ import Foundation
 public enum SyncError: LocalizedError, Sendable, SyncNotFound {
   case notFound(String)
   case invalidInput(String)
+  /// The exclusive sync lock is held by another process. Distinct from
+  /// `unknown` so callers (e.g. a launchd-triggered run) can skip quietly.
+  case alreadyRunning
   case unknown(String)
 
   public var errorDescription: String? {
@@ -16,6 +19,8 @@ public enum SyncError: LocalizedError, Sendable, SyncNotFound {
       return "Not found: \(message)"
     case .invalidInput(let message):
       return "Invalid input: \(message)"
+    case .alreadyRunning:
+      return "Another sync operation is already running"
     case .unknown(let message):
       return "Error: \(message)"
     }
