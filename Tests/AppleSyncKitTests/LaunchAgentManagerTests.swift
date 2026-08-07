@@ -1,3 +1,4 @@
+#if os(macOS)
 import XCTest
 
 @testable import AppleSyncKit
@@ -85,3 +86,4 @@ final class LaunchAgentManagerTests: XCTestCase {
     XCTAssertEqual(status.state, .unknown)
   }
 }
+#endif
