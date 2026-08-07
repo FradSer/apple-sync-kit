@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.1] - 2026-08-08
+
+### Fixed
+- Guard macOS-only tests with `#if os(macOS)` to unbreak Linux CI
+
 ## [0.1.0] - 2026-06-23
 
 ### Added
@@ -14,3 +19,5 @@
 ### Fixed
 - `SyncEntityState` decodes legacy state files missing `dateRangeByRemoteId` (custom `init(from:)` defaulting absent fields)
 - `D1SyncClient` percent-encodes `/` in record ids so slash-bearing ids (e.g. `x-coredata://…`) resolve the Worker's delete route instead of 404ing
+
+[0.4.1]: https://github.com/FradSer/apple-sync-kit/compare/v0.4.0...v0.4.1
