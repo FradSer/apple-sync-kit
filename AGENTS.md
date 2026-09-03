@@ -1,44 +1,46 @@
-# AGENTS.md
+# Repository Guidelines
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+`AppleSyncKit` is an entity-agnostic Swift package providing bidirectional, last-write-wins synchronization against a Cloudflare D1 Worker backend, shared across consumer CLIs (`note`, `event`).
 
-## What this is
+## Project Structure & Module Organization
 
-`AppleSyncKit` is a generic, **entity-agnostic** Swift library — the shared core behind several personal sync CLIs (e.g. note-sync, reminder-sync). It implements one bidirectional, last-write-wins sync algorithm against a Cloudflare D1 sync Worker, plus the supporting crypto, persistence, SQLite, and HTTP pieces.
+- **`Sources/AppleSyncKit/`**: Core Swift library.
+  - `Engine/SyncEngine.swift`: Stateless generic synchronization algorithms (`pushSnapshot`, `pushLocalOnly`, `pull`).
+  - `Network/D1SyncClient.swift`: Actor HTTP client communicating with Cloudflare D1 (`maxBatchSize = 500` aligned with Worker `MAX_BATCH_SIZE`).
+  - `Persistence/ConfigStore.swift`: Thread-safe configuration and JSON state management (`~/.config/<namespace>/`, mode 0o600, `flock`).
+  - `Crypto/EncryptionService.swift`: AES-GCM encryption with `recordId|modifiedDate` AAD binding.
+  - `SQLite/`: Local SQLite row helpers and connection extensions.
+  - `Daemon/LaunchAgentManager.swift`: macOS launchd background agent management (`#if os(macOS)`).
+  - `Models/`, `DTO/`, `Errors/`: Public models, internal wire DTOs (`RawJSON`), and typed sync errors.
+- **`Tests/AppleSyncKitTests/`**: XCTest test suites.
+- **`worker/`**: Canonical Cloudflare D1 sync Worker implementation.
+- *Note on tooling*: `@fradser/pi-kit` workspace runtime is absent in this repository.
 
-The kit owns **no** entity types and **no** on-disk JSON schema. Consuming projects pass their own `Codable` record/state/cursor/mapping types in, addressed via `WritableKeyPath`s. Keep every API generic over the record type and take the entity name as a `String` — never bake a concrete entity (notes, reminders, …) into the kit.
+## Build, Test & Development Commands
 
-## Commands
+- **Build**: `swift build` (SwiftPM; initial build resolves SwiftNIO/swift-crypto).
+- **Run all tests**: `swift test`
+- **Run single test**: `swift test --filter EncryptionServiceTests/testEncryptDecryptRoundTrip`
+- **Format code**: `swift format --in-place --recursive Sources Tests`
+- **Lint code**: `swift format lint --strict --recursive Sources Tests`
 
-- Build: `swift build` (the first build resolves a large SwiftNIO/swift-crypto graph and is slow; later builds are fast)
-- Test: `swift test` — single test: `swift test --filter EncryptionServiceTests/testEncryptDecryptRoundTrip`
-- Format (write in place): `swift format --in-place --recursive Sources Tests`
-- Lint: `swift format lint --strict --recursive Sources Tests`
+Formatting is governed by `.swift-format` (2-space indent, 100-character line limit). Do not use Biome or SwiftLint for Swift code.
 
-Formatter/linter is Apple **swift-format**, driven by `.swift-format` (2-space indent, 100-col lines). It is the bundled `swift format` subcommand — there is no standalone `swift-format` binary, and this project does **not** use Biome or SwiftLint.
+## Coding Style & Concurrency
 
-## Toolchain & concurrency
+- **Toolchain**: Swift 6.2 with strict concurrency (`SWIFT_DEFAULT_ACTOR_ISOLATION = complete`), macOS 14+ / Linux.
+- Types crossing concurrency boundaries must conform to `Sendable`; stateful services must be `actor`s (`EncryptionService`, `D1SyncClient`).
+- In `SQLite/Connection+Sendable.swift`, `extension Connection: @retroactive @unchecked Sendable` is intentional. The `AvoidRetroactiveConformances` lint warning is expected and must not be removed.
+- Keep the library entity-agnostic: use generic records and dynamic keypaths (`WritableKeyPath`); do not hardcode consumer-specific domain types.
+- Persist synced state before triggering delete RPCs to prevent losing pushes on network failure.
 
-- swift-tools 6.2, **Swift 6 language mode (strict concurrency)**, platform macOS 14+.
-- Every type crossing a concurrency boundary must be `Sendable`; stateful services are `actor`s (`EncryptionService`, `D1SyncClient`).
-- `SQLite/Connection+Sendable.swift` declares `extension Connection: @retroactive @unchecked Sendable`. This is **intentional and must live only here** — consuming projects import it and must not redeclare it. `swift format lint` flags it as `AvoidRetroactiveConformances`; that warning is expected — do not "fix" it.
+## Testing Guidelines
 
-## Architecture & invariants
+- Use XCTest in `Tests/AppleSyncKitTests/`. Async tests should be `async throws` awaiting actors.
+- Platform-specific features (such as `LaunchAgentManager`) must be guarded with `#if os(macOS)` in test files so Linux CI passes.
 
-Dependencies point inward; the kit has no composition root (wiring is the consuming CLI's job).
+## Commit & Pull Request Guidelines
 
-- **`Engine/SyncEngine.swift`** — a stateless `enum` of static generic functions: the one shared algorithm. Two push strategies, `pushSnapshot` (EventKit/macOS, diff against recorded state) and `pushLocalOnly` (SQLite/Linux `is_local_only` flag); one cursor-based `pull`. Conflicts resolve last-write-wins by `lastModified`. Invariant: synced state is persisted **before** any delete RPC fires, so a failed delete can never lose a recorded push — preserve this ordering.
-- **`Network/D1SyncClient.swift`** (`actor`) — HTTP client for the D1 Worker. `maxBatchSize = 500` **must match `MAX_BATCH_SIZE` in the Cloudflare Worker** (separate repo); changing one without the other breaks batching.
-- **`Persistence/ConfigStore.swift`** — JSON state under `~/.config/<namespace>/`, mode 0o600 via atomic rename, guarded by an exclusive `flock`. Use `loadJSONStrict` for state/id-mapping (throws on corruption — never silently reset) and `loadJSON` for cursors (rebuildable — warns and returns default).
-- **`Crypto/EncryptionService.swift`** (`actor`) — AES-GCM over any `Codable` payload, binding `recordId|modifiedDate` as AAD.
-- **`SQLite/SQLiteSyncStore.swift`** — generic JSON-blob row helpers; each entity is one table with `data`/`deleted`/`is_local_only` columns.
-- **`Daemon/LaunchAgentManager.swift`** (macOS-only, `#if os(macOS)`) — renders/installs/inspects per-user launchd agents for background sync. Entity-agnostic: the consumer supplies the label, program arguments, and environment (encryption key included — launchd jobs don't inherit shell env). Lock contention surfaces as `SyncError.alreadyRunning` so a daemon-triggered run can skip quietly.
-- Public value types live in `Models/`; `DTO/` holds internal wire types (`RawJSON`/`JSONValue` preserve server bytes without an `AnyCodable` dependency).
-
-## Configuration (consumer-facing)
-
-Config resolves env-first, then `~/.config/<namespace>/config.json`. Env keys are prefixed per consuming project: `<PREFIX>_SYNC_API_URL`, `<PREFIX>_SYNC_API_TOKEN`, `<PREFIX>_SYNC_DEVICE_ID`. The API URL must be HTTPS. The encryption key is a separate base64 32-byte env var (`openssl rand -base64 32`), exported on every device.
-
-## Tests
-
-XCTest (not swift-testing), in `Tests/AppleSyncKitTests/`. Async tests are `async throws` and `await` the actor calls.
+- Commit messages follow Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `ci:`. Scopes like `(src)` may be used.
+- Pull requests target `main` (active development branch is `develop`).
+- CI validates code formatting (`swift format` producing zero diff), Linux tests under Swift 6.2 container, and macOS 14 tests. Tags matching `v*.*.*` or `*.*.*` trigger automated GitHub release generation.
