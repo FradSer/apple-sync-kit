@@ -67,10 +67,10 @@ final class SyncStateJournalTests: XCTestCase {
   func testUnreadableJournalThrowsStrictError() throws {
     let data = Data("{}".utf8)
     try data.write(to: URL(fileURLWithPath: journalPath))
-    // Remove read permissions
-    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: journalPath)
+    let journal = SyncStateJournal(journalPath: journalPath) { _ in
+      throw CocoaError(.fileReadNoPermission)
+    }
 
-    let journal = SyncStateJournal(journalPath: journalPath)
     XCTAssertThrowsError(try journal.load()) { error in
       guard case SyncError.unknown(let message) = error else {
         return XCTFail("Expected SyncError.unknown, got \(error)")

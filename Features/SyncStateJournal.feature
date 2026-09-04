@@ -19,6 +19,6 @@ Feature: Consolidated Sync State Journal
     Then a SyncError.unknown is thrown indicating parse failure
 
   Scenario: Strict error when sync journal cannot be read
-    Given an unreadable sync-state.json file on disk
+    Given the filesystem reports a read failure for sync-state.json
     When the journal load is attempted
     Then a SyncError.unknown is thrown indicating the journal could not be read
