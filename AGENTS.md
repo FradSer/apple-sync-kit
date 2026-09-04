@@ -5,9 +5,11 @@
 ## Project Structure & Module Organization
 
 - **`Sources/AppleSyncKit/`**: Core Swift library.
-  - `Engine/SyncEngine.swift`: Stateless generic synchronization algorithms (`pushSnapshot`, `pushLocalOnly`, `pull`).
+  - `Engine/SyncCoordinator.swift`: Deep bidirectional sync orchestrator managing locks (`flock`), push/pull pipelines, and atomic checkpointing.
+  - `Engine/LocalSyncSource.swift`: Local storage adapter seam (`SnapshotSyncSource` for macOS/EventKit, `FlaggedSyncSource` for Linux/SQLite).
+  - `Persistence/SyncStateJournal.swift`: Consolidated atomic sync state persistence (`sync-state.json`, mode 0o600).
   - `Network/D1SyncClient.swift`: Actor HTTP client communicating with Cloudflare D1 (`maxBatchSize = 500` aligned with Worker `MAX_BATCH_SIZE`).
-  - `Persistence/ConfigStore.swift`: Thread-safe configuration and JSON state management (`~/.config/<namespace>/`, mode 0o600, `flock`).
+  - `Persistence/ConfigStore.swift`: Configuration management and lock coordination (`~/.config/<namespace>/`).
   - `Crypto/EncryptionService.swift`: AES-GCM encryption with `recordId|modifiedDate` AAD binding.
   - `SQLite/`: Local SQLite row helpers and connection extensions.
   - `Daemon/LaunchAgentManager.swift`: macOS launchd background agent management (`#if os(macOS)`).
