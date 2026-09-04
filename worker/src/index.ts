@@ -32,6 +32,7 @@ type EntitySQL = {
   upsert: string;
   selectPage: string;
   softDelete: string;
+  selectDeleteStatus: string;
   purgeDeleted: string;
 };
 
@@ -69,7 +70,8 @@ function entitySQL(table: string): EntitySQL {
   return {
     upsert: upsertSQL(table),
     selectPage: selectPageSQL(table),
-    softDelete: `UPDATE ${table} SET deleted = 1, updated_at = datetime('now'), seq = (SELECT IFNULL(MAX(seq), 0) + 1 FROM ${table}) WHERE id = ? AND last_modified <= ?`,
+    softDelete: `UPDATE ${table} SET deleted = 1, last_modified = ?2, updated_at = datetime('now'), seq = (SELECT IFNULL(MAX(seq), 0) + 1 FROM ${table}) WHERE id = ?1 AND deleted = 0 AND last_modified <= ?2`,
+    selectDeleteStatus: `SELECT deleted FROM ${table} WHERE id = ? LIMIT 1`,
     purgeDeleted: `DELETE FROM ${table} WHERE deleted = 1 AND updated_at < datetime('now', '-30 days')`,
   };
 }
@@ -176,7 +178,7 @@ app.post("/api/v1/:entity/push", async (c) => {
   }
 
   if (items.length === 0) {
-    return c.json({ synced: 0, skipped: 0 });
+    return c.json({ synced: 0, skipped: 0, synced_ids: [] });
   }
 
   if (items.length > MAX_BATCH_SIZE) {
@@ -207,9 +209,12 @@ app.post("/api/v1/:entity/push", async (c) => {
   }
 
   const results = await c.env.DB.batch(stmts);
-  const synced = results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+  const syncedIds = results.flatMap((result, index) =>
+    (result.meta.changes ?? 0) > 0 ? [items[index].id] : []
+  );
+  const synced = syncedIds.length;
 
-  return c.json({ synced, skipped: items.length - synced });
+  return c.json({ synced, skipped: items.length - synced, synced_ids: syncedIds });
 });
 
 // Pull: incremental cursor-based fetch using composite (seq, id) cursor
@@ -312,8 +317,14 @@ app.delete("/api/v1/:entity/:id", async (c) => {
   }
 
   const result = await c.env.DB.prepare(sql.softDelete).bind(id, lastModified).run();
+  if ((result.meta.changes ?? 0) > 0) {
+    return c.json({ result: "deleted" });
+  }
 
-  return c.json({ deleted: (result.meta.changes ?? 0) > 0 });
+  const existing = await c.env.DB.prepare(sql.selectDeleteStatus)
+    .bind(id)
+    .first<{ deleted: number }>();
+  return c.json({ result: !existing || existing.deleted === 1 ? "already_absent" : "rejected" });
 });
 
 // Purge soft-deleted records older than 30 days (manual trigger;

@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 
 type PushItem = { id: string; data: unknown; last_modified: string };
-type PushBody = { synced: number; skipped: number };
+type PushBody = { synced: number; skipped: number; synced_ids?: string[] };
 type PullItem = {
   id: string;
   data: unknown;
@@ -84,6 +84,17 @@ describe("entities", () => {
 });
 
 describe("push / pull", () => {
+  it("returns an empty accepted-ID list for an empty push", async () => {
+    const res = await push("device-a", []);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      synced: 0,
+      skipped: 0,
+      synced_ids: [],
+    } satisfies PushBody);
+  });
+
   it("pushes an item and pulls it back from another device", async () => {
     const res = await push("device-a", [
       {
@@ -93,7 +104,11 @@ describe("push / pull", () => {
       },
     ]);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ synced: 1, skipped: 0 } satisfies PushBody);
+    expect(await res.json()).toEqual({
+      synced: 1,
+      skipped: 0,
+      synced_ids: ["i1"],
+    } satisfies PushBody);
 
     const body = await pull({ device: "device-b" });
     expect(body.items).toHaveLength(1);
@@ -120,7 +135,11 @@ describe("push / pull", () => {
     const res = await push("device-a", [
       { id: "i1", data: { label: "stale" }, last_modified: "2026-03-10T09:00:00Z" },
     ]);
-    expect(await res.json()).toEqual({ synced: 0, skipped: 1 } satisfies PushBody);
+    expect(await res.json()).toEqual({
+      synced: 0,
+      skipped: 1,
+      synced_ids: [],
+    } satisfies PushBody);
 
     const body = await pull({ device: "device-b" });
     expect(body.items[0].data).toEqual({ label: "current" });
@@ -182,11 +201,65 @@ describe("delete", () => {
       body: JSON.stringify({ last_modified: "2026-03-10T11:00:00Z" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deleted: true });
+    expect(await res.json()).toEqual({ result: "deleted" });
 
     const body = await pull({ device: "device-b" });
     expect(body.items).toHaveLength(1);
     expect(body.items[0].deleted).toBe(true);
+  });
+
+  it("keeps the deletion timestamp so an earlier upsert cannot resurrect the row", async () => {
+    await push("device-a", [
+      { id: "i1", data: { label: "original" }, last_modified: "2026-03-10T10:00:00Z" },
+    ]);
+    const deleted = await SELF.fetch(`${BASE}/api/v1/${ENTITY}/i1`, {
+      method: "DELETE",
+      headers: { ...AUTH, "Content-Type": "application/json" },
+      body: JSON.stringify({ last_modified: "2026-03-10T12:00:00Z" }),
+    });
+    expect(await deleted.json()).toEqual({ result: "deleted" });
+
+    const staleUpsert = await push("device-b", [
+      { id: "i1", data: { label: "stale resurrection" }, last_modified: "2026-03-10T11:00:00Z" },
+    ]);
+    expect(await staleUpsert.json()).toEqual({
+      synced: 0,
+      skipped: 1,
+      synced_ids: [],
+    } satisfies PushBody);
+
+    const body = await pull({ device: "device-c" });
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].deleted).toBe(true);
+    expect(body.items[0].last_modified).toBe("2026-03-10T12:00:00.000Z");
+  });
+
+  it("rejects a stale delete while the newer live record remains", async () => {
+    await push("device-a", [
+      { id: "i1", data: { label: "newer" }, last_modified: "2026-03-10T12:00:00Z" },
+    ]);
+
+    const res = await SELF.fetch(`${BASE}/api/v1/${ENTITY}/i1`, {
+      method: "DELETE",
+      headers: { ...AUTH, "Content-Type": "application/json" },
+      body: JSON.stringify({ last_modified: "2026-03-10T11:00:00Z" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: "rejected" });
+    const body = await pull({ device: "device-b" });
+    expect(body.items[0].deleted).toBe(false);
+  });
+
+  it("treats a missing item as an idempotently accepted delete", async () => {
+    const res = await SELF.fetch(`${BASE}/api/v1/${ENTITY}/missing`, {
+      method: "DELETE",
+      headers: { ...AUTH, "Content-Type": "application/json" },
+      body: JSON.stringify({ last_modified: "2026-03-10T11:00:00Z" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: "already_absent" });
   });
 });
 
