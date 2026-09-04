@@ -16,14 +16,38 @@ public struct SyncConfig: Codable, Sendable {
 
 // MARK: - Sync Results
 
-public struct PushResult: Codable, Sendable {
+public struct PushResult: Codable, Sendable, Equatable {
   public let synced: Int
   public let skipped: Int
+  /// Remote IDs whose writes were accepted by the backend.
+  public let syncedIds: [String]
 
-  public init(synced: Int, skipped: Int) {
+  public init(synced: Int, skipped: Int, syncedIds: [String] = []) {
     self.synced = synced
     self.skipped = skipped
+    self.syncedIds = syncedIds
   }
+
+  enum CodingKeys: String, CodingKey {
+    case synced
+    case skipped
+    case syncedIds = "synced_ids"
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    synced = try container.decode(Int.self, forKey: .synced)
+    skipped = try container.decode(Int.self, forKey: .skipped)
+    syncedIds = try container.decodeIfPresent([String].self, forKey: .syncedIds) ?? []
+  }
+}
+
+public enum DeleteResult: String, Codable, Sendable, Equatable {
+  case deleted
+  case alreadyAbsent = "already_absent"
+  case rejected
+
+  public var accepted: Bool { self != .rejected }
 }
 
 public struct PullResponse<T: Codable & Sendable>: Sendable {
@@ -54,7 +78,7 @@ public struct PullItem<T: Codable & Sendable>: Sendable {
   }
 }
 
-public struct PullSummary: Codable, Sendable {
+public struct PullSummary: Codable, Sendable, Equatable {
   public let pulled: Int
   public let deleted: Int
   public let skipped: Int

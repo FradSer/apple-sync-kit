@@ -3,6 +3,10 @@ import XCTest
 @testable import AppleSyncKit
 
 final class ConfigStoreTests: XCTestCase {
+  private struct ConsumerState: Codable, Equatable {
+    let value: String
+  }
+
   private let store = ConfigStore(namespace: "note-sync", prefix: "NOTE")
 
   func testEnvKeyNames() {
@@ -58,6 +62,28 @@ final class ConfigStoreTests: XCTestCase {
 
   func testEnvOverrideNoticeAbsentWhenOnlyOneSet() {
     XCTAssertNil(store.envOverrideNotice(["NOTE_SYNC_API_URL": "https://x.dev"]))
+  }
+
+  func testConsumerOwnedJSONRoundTripsAtomically() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("AppleSyncKitConfigTests-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let isolatedStore = ConfigStore(namespace: "consumer", prefix: "TEST", rootDirectory: root)
+    let path = isolatedStore.path(for: "consumer-state.json")
+    let value = ConsumerState(value: "preserved")
+
+    try isolatedStore.saveJSON(value, to: path)
+
+    XCTAssertEqual(
+      try isolatedStore.loadJSONStrict(from: path, default: ConsumerState(value: "default")),
+      value
+    )
+    XCTAssertEqual(
+      isolatedStore.loadJSON(from: path, default: ConsumerState(value: "default")),
+      value
+    )
+    let attributes = try FileManager.default.attributesOfItem(atPath: path)
+    XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
   }
 
   func testEnvOverrideNoticeAbsentWhenEnvURLNonHTTPS() {
