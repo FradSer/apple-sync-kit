@@ -1,3 +1,5 @@
 scopes:
     - name: src
       description: core application business logic and services located in sources/; does not cover testing infrastructure
+    - name: worker
+      description: cloud backend synchronization worker in worker/; does not cover the primary AppleSyncKit framework or general documentation

@@ -28,10 +28,19 @@ public struct SQLiteSyncStore: Sendable {
     }
   }
 
-  public func fetchDeletedRecords(from table: String) throws -> [SyncEngine.DeletedRecord] {
+  public func fetchDeletedRecords(from table: String) throws -> [LocalDeletedRecord] {
     try connection.prepare("SELECT id, last_modified FROM \(table) WHERE deleted = 1").map { row in
-      SyncEngine.DeletedRecord(id: row[0] as! String, lastModified: row[1] as! String)
+      LocalDeletedRecord(id: row[0] as! String, lastModified: row[1] as! String)
     }
+  }
+
+  /// Fetches the stored `last_modified` timestamp for a specific record.
+  public func fetchLastModified(table: String, id: String) throws -> String? {
+    let stmt = try connection.prepare("SELECT last_modified FROM \(table) WHERE id = ? LIMIT 1")
+    for row in stmt.bind(id) {
+      return row[0] as? String
+    }
+    return nil
   }
 
   public func clearLocalOnly(table: String, ids: [String]) throws {

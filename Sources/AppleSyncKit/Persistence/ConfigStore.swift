@@ -2,30 +2,39 @@ import Foundation
 
 // MARK: - Config Store
 
-/// Generic sync config + state persistence under `~/.config/<namespace>/`.
-/// Configured with a `namespace` (e.g. "note-sync") and env-var `prefix` (e.g.
-/// "NOTE"). Consuming projects load/save their concrete `Codable` state types
-/// through the generic JSON helpers, so the on-disk JSON shape is theirs — the kit
-/// imposes no schema. Files are written 0o600 via atomic rename.
+/// Stores sync configuration under `~/.config/<namespace>/` and coordinates
+/// exclusive sync locking. Sync state is managed by `SyncStateJournal`.
 public struct ConfigStore: Sendable {
   public let namespace: String
   public let prefix: String
+  private let rootDirectory: URL?
 
-  public init(namespace: String, prefix: String) {
+  public init(namespace: String, prefix: String, rootDirectory: URL? = nil) {
     self.namespace = namespace
     self.prefix = prefix
+    self.rootDirectory = rootDirectory
   }
 
   private var baseDirectory: URL {
-    FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".config")
-      .appendingPathComponent(namespace)
+    let root =
+      rootDirectory
+      ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config")
+    return root.appendingPathComponent(namespace)
   }
 
-  public var configPath: String { baseDirectory.appendingPathComponent("config.json").path }
-  public var cursorsPath: String { baseDirectory.appendingPathComponent("cursors.json").path }
-  public var idMappingPath: String { baseDirectory.appendingPathComponent("id-mapping.json").path }
-  public var statePath: String { baseDirectory.appendingPathComponent("state.json").path }
+  public var configPath: String { path(for: "config.json") }
+  public var syncJournalPath: String {
+    baseDirectory.appendingPathComponent("sync-state.json").path
+  }
+
+  public var journal: SyncStateJournal {
+    SyncStateJournal(journalPath: syncJournalPath)
+  }
+
+  /// Resolves a consumer-owned filename under this store's config namespace.
+  public func path(for filename: String) -> String {
+    baseDirectory.appendingPathComponent(filename).path
+  }
 
   public var apiURLEnvKey: String { "\(prefix)_SYNC_API_URL" }
   public var apiTokenEnvKey: String { "\(prefix)_SYNC_API_TOKEN" }
@@ -33,7 +42,7 @@ public struct ConfigStore: Sendable {
 
   // MARK: - Lock
 
-  /// Acquire an exclusive, non-blocking file lock to prevent concurrent sync.
+  /// Acquires an exclusive, non-blocking file lock to prevent concurrent sync.
   /// Returns the file descriptor; call `releaseLock(_:)` when done.
   public func acquireLock() throws -> Int32 {
     let dir = baseDirectory
@@ -64,7 +73,7 @@ public struct ConfigStore: Sendable {
   }
 
   /// Builds a `SyncConfig` from environment variables. Returns `nil` when neither
-  /// required variable is set; throws when exactly one is set or the URL isn't HTTPS.
+  /// required variable is set; throws when exactly one is set or the URL is not HTTPS.
   public func loadFromEnvironment(
     _ environment: [String: String] = ProcessInfo.processInfo.environment
   ) throws -> SyncConfig? {
@@ -92,8 +101,7 @@ public struct ConfigStore: Sendable {
     return isSet(apiURLEnvKey) && isSet(apiTokenEnvKey)
   }
 
-  /// Loads the sync config: environment variables take precedence, then the
-  /// config file. `notFoundMessage` lets the caller phrase a CLI-friendly error.
+  /// Loads the sync config: environment variables take precedence, then the config file.
   public func loadConfig(notFoundMessage: String? = nil) throws -> SyncConfig {
     if let envConfig = try loadFromEnvironment() {
       return envConfig
@@ -120,27 +128,11 @@ public struct ConfigStore: Sendable {
     }
   }
 
-  /// Returns a notice when environment variables are set AND would actually
-  /// take precedence over the config file just saved (i.e. `loadFromEnvironment`
-  /// succeeds — both required vars present and the URL is valid HTTPS). `nil`
-  /// otherwise. Pure for testability (defaults to the live environment).
-  public func envOverrideNotice(
-    _ environment: [String: String] = ProcessInfo.processInfo.environment
-  ) -> String? {
-    // Only warn when env config loads successfully — a non-HTTPS env URL would
-    // make loadFromEnvironment throw on the next load, so env would NOT win.
-    guard (try? loadFromEnvironment(environment)) != nil else { return nil }
-    return
-      "Note: \(apiURLEnvKey)/\(apiTokenEnvKey) are set in the environment"
-      + " and will take precedence over \(configPath)."
-  }
-
-  // MARK: - Generic JSON helpers
-
-  /// Returns the default when the file is missing; logs and returns the default on
-  /// parse errors (used for cursors, which are safe to rebuild).
+  /// Returns the default when the file is missing or malformed.
   public func loadJSON<T: Decodable>(from path: String, default defaultValue: T) -> T {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return defaultValue }
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+      return defaultValue
+    }
     do {
       return try JSONDecoder().decode(T.self, from: data)
     } catch {
@@ -149,13 +141,9 @@ public struct ConfigStore: Sendable {
     }
   }
 
-  /// Returns the default when the file is missing; throws on parse errors (used for
-  /// state and id-mapping, which must not be silently reset).
+  /// Returns the default when the file is missing and throws when it is malformed.
   public func loadJSONStrict<T: Decodable>(from path: String, default defaultValue: T) throws -> T {
-    let data: Data
-    do {
-      data = try Data(contentsOf: URL(fileURLWithPath: path))
-    } catch {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
       return defaultValue
     }
     do {
@@ -163,41 +151,23 @@ public struct ConfigStore: Sendable {
     } catch {
       throw SyncError.unknown(
         "Could not parse \(path): \(error.localizedDescription). "
-          + "Repair or remove the file before syncing again.")
+          + "Repair or remove the file before continuing."
+      )
     }
   }
 
-  /// Writes JSON to `path` via a 0o600 temp file plus atomic rename.
+  /// Atomically writes consumer-owned JSON with mode 0o600.
   public func saveJSON<T: Encodable>(_ value: T, to path: String) throws {
-    let dir = URL(fileURLWithPath: path).deletingLastPathComponent()
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    let data = try JSONEncoder().encode(value)
-    let tempPath = path + ".tmp.\(ProcessInfo.processInfo.processIdentifier)"
-    let fd = open(tempPath, O_CREAT | O_WRONLY | O_TRUNC, 0o600)
-    guard fd >= 0 else { throw posixError("Cannot create \(tempPath)") }
-    do {
-      try data.withUnsafeBytes { bytes in
-        var written = 0
-        while written < bytes.count {
-          let n = write(fd, bytes.baseAddress! + written, bytes.count - written)
-          guard n > 0 else { throw posixError("Write failed") }
-          written += n
-        }
-      }
-    } catch {
-      close(fd)
-      try? FileManager.default.removeItem(atPath: tempPath)
-      throw error
-    }
-    close(fd)
-    guard rename(tempPath, path) == 0 else {
-      let error = posixError("Cannot save \(path)")
-      try? FileManager.default.removeItem(atPath: tempPath)
-      throw error
-    }
+    try AtomicJSONFile(path: path).save(value)
   }
 
-  private func posixError(_ context: String, _ code: Int32 = errno) -> SyncError {
-    SyncError.unknown("\(context): \(String(cString: strerror(code)))")
+  /// Returns a notice when valid environment config overrides the saved file.
+  public func envOverrideNotice(
+    _ environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
+    guard (try? loadFromEnvironment(environment)) != nil else { return nil }
+    return
+      "Note: \(apiURLEnvKey)/\(apiTokenEnvKey) are set in the environment"
+      + " and will take precedence over \(configPath)."
   }
 }

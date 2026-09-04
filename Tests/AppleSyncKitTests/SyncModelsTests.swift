@@ -89,6 +89,38 @@ final class SyncModelsTests: XCTestCase {
     XCTAssertNil(SyncTimestamp.parse("nonsense"))
   }
 
+  // MARK: - Push results
+
+  func testPushResultDecodesAcceptedRemoteIDs() throws {
+    let data = Data(#"{"synced":1,"skipped":1,"synced_ids":["accepted"]}"#.utf8)
+    XCTAssertEqual(
+      try JSONDecoder().decode(PushResult.self, from: data),
+      PushResult(synced: 1, skipped: 1, syncedIds: ["accepted"])
+    )
+  }
+
+  func testDeleteResultDecodesWorkerStatuses() throws {
+    XCTAssertEqual(
+      try JSONDecoder().decode(DeleteResult.self, from: Data(#""deleted""#.utf8)),
+      .deleted
+    )
+    XCTAssertEqual(
+      try JSONDecoder().decode(DeleteResult.self, from: Data(#""already_absent""#.utf8)),
+      .alreadyAbsent
+    )
+    XCTAssertTrue(DeleteResult.deleted.accepted)
+    XCTAssertTrue(DeleteResult.alreadyAbsent.accepted)
+    XCTAssertFalse(DeleteResult.rejected.accepted)
+  }
+
+  func testPushResultDefaultsAcceptedRemoteIDsForOlderResponses() throws {
+    let data = Data(#"{"synced":1,"skipped":0}"#.utf8)
+    XCTAssertEqual(
+      try JSONDecoder().decode(PushResult.self, from: data),
+      PushResult(synced: 1, skipped: 0)
+    )
+  }
+
   // MARK: - Cursor policy
 
   func testCursorPolicy() {

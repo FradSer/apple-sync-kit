@@ -48,6 +48,16 @@ public enum SyncCursorPolicy {
 // MARK: - Push Helpers
 
 public enum SyncPushHelpers {
+  /// Deduplicates items by their extracted ID preserving insertion order.
+  public static func dedup<E>(_ items: [E], getId: (E) -> String) -> [E] {
+    var seen = Set<String>()
+    var unique = [E]()
+    for item in items where seen.insert(getId(item)).inserted {
+      unique.append(item)
+    }
+    return unique
+  }
+
   /// Resolves the remote ids currently present locally. Items without an explicit
   /// mapping use their local id as the remote id.
   public static func currentRemoteIds<E>(

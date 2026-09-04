@@ -139,7 +139,8 @@ public actor D1SyncClient {
 
   // MARK: - Delete
 
-  public func delete(entity: String, id: String, lastModified: String?) async throws {
+  public func delete(entity: String, id: String, lastModified: String?) async throws -> DeleteResult
+  {
     let encodedId = id.addingPercentEncoding(withAllowedCharacters: Self.pathSegmentAllowed) ?? id
     var httpRequest = HTTPClientRequest(url: "\(config.apiURL)/api/v1/\(entity)/\(encodedId)")
     httpRequest.method = .DELETE
@@ -151,11 +152,15 @@ public actor D1SyncClient {
     httpRequest.body = .bytes(try JSONEncoder().encode(bodyDict))
 
     let response = try await httpClient.execute(httpRequest, timeout: .seconds(120))
+    let responseData = try await response.body.collect(upTo: 1024 * 1024)
     guard response.status == .ok else {
-      let responseData = try await response.body.collect(upTo: 1024 * 1024)
       let errorBody = String(buffer: responseData)
       throw SyncError.unknown("Delete failed (\(response.status.code)): \(errorBody)")
     }
+    struct DeleteResponse: Decodable {
+      let result: DeleteResult
+    }
+    return try JSONDecoder().decode(DeleteResponse.self, from: Data(buffer: responseData)).result
   }
 
   // MARK: - Generic Batch Push
@@ -166,15 +171,17 @@ public actor D1SyncClient {
     guard !items.isEmpty else { return PushResult(synced: 0, skipped: 0) }
     var synced = 0
     var skipped = 0
+    var syncedIds = [String]()
     var offset = 0
     while offset < items.count {
       let chunk = Array(items[offset..<min(offset + Self.maxBatchSize, items.count)])
       let result = try await pushBatch(entity: entity, items: chunk)
       synced += result.synced
       skipped += result.skipped
+      syncedIds.append(contentsOf: result.syncedIds)
       offset += Self.maxBatchSize
     }
-    return PushResult(synced: synced, skipped: skipped)
+    return PushResult(synced: synced, skipped: skipped, syncedIds: syncedIds)
   }
 
   private func pushBatch<T: Codable>(entity: String, items: [PushRequestItem<T>]) async throws
@@ -197,6 +204,14 @@ public actor D1SyncClient {
       let errorBody = String(buffer: responseData)
       throw SyncError.unknown("Push failed (\(response.status.code)): \(errorBody)")
     }
-    return try JSONDecoder().decode(PushResult.self, from: Data(buffer: responseData))
+    let result = try JSONDecoder().decode(PushResult.self, from: Data(buffer: responseData))
+    if result.syncedIds.isEmpty && result.skipped == 0 {
+      return PushResult(
+        synced: result.synced,
+        skipped: result.skipped,
+        syncedIds: items.map(\.id)
+      )
+    }
+    return result
   }
 }

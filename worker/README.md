@@ -13,7 +13,7 @@ runtime. Point `migrations_dir` at the consumer repo's migration directory.
 ## What it does
 
 Bidirectional, last-write-wins sync over D1, matching the algorithm in
-`AppleSyncKit` (`Sources/AppleSyncKit/Engine/SyncEngine.swift`):
+`AppleSyncKit` (`Sources/AppleSyncKit/Engine/SyncCoordinator.swift`):
 
 - `POST /api/v1/:entity/push` — batch upsert, `last_modified` guard (≤500 items)
 - `GET  /api/v1/:entity/pull` — incremental, composite `(seq, id)` cursor, excludes the caller's own writes

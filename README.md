@@ -11,34 +11,36 @@ A generic, entity-agnostic Swift library for bidirectional sync against a Cloudf
 The library has no built-in entity types or JSON schema. Consuming projects pass their own `Codable` types via `WritableKeyPath`s, and address entities by name string. Dependencies point inward; there is no composition root — wiring is the consuming CLI's job.
 
 ```
-SyncEngine (stateless algorithm)
+SyncCoordinator (deep bidirectional sync orchestrator)
     ↓
-D1SyncClient (HTTP transport, actor)
+LocalSyncSource (unified storage adapter seam: SnapshotSyncSource / FlaggedSyncSource)
+    ↓
+D1SyncClient (HTTP transport, actor) / SyncRemoteClient
     ↑
-ConfigStore (persistence)    EncryptionService (AES-GCM, actor)
+ConfigStore / SyncStateJournal (atomic sync-state.json)    EncryptionService (AES-GCM, actor)
     ↑
 SQLiteSyncStore (local DB)
 ```
 
-### Sync Strategies
+### Sync Architecture
 
-The engine offers two push strategies and one pull:
+The coordinator provides a unified sync pipeline over any `LocalSyncSource`:
 
-- **`pushSnapshot`** — For EventKit/macOS. Diffs the current state against a recorded snapshot, pushes changed items, then soft-deletes remote IDs no longer present locally. State is persisted before any delete RPC fires, so a failed delete never loses a recorded push.
-- **`pushLocalOnly`** — For SQLite/Linux. Pushes items flagged `is_local_only`, clears the flag, then handles deletions.
-- **`pull`** — Cursor-based incremental pull with last-write-wins conflict resolution. Project-supplied closures handle upsert and delete.
+- **`SyncCoordinator`** — Manages cross-process locking (`flock`), push/pull execution, and atomic state checkpointing via `SyncStateJournal` into `sync-state.json`.
+- **`SnapshotSyncSource`** — For EventKit/macOS. Diffs current state against recorded snapshots with volatile key masking.
+- **`FlaggedSyncSource`** — For SQLite/Linux. Pushes items flagged `is_local_only`, manages soft deletions, and persists remote updates.
 
 ## Modules
 
 | Module | Purpose |
 |---|---|
-| **Engine** | Stateless sync algorithm (`pushSnapshot`, `pushLocalOnly`, `pull`) |
-| **Network** | `actor`-based HTTP client for the D1 Worker; batch size 500 (must match Worker's `MAX_BATCH_SIZE`) |
+| **Engine** | `SyncCoordinator` orchestrator and `LocalSyncSource` storage adapter seam |
+| **Network** | `actor`-based HTTP client for the D1 Worker (`SyncRemoteClient`); batch size 500 |
 | **Crypto** | AES-GCM encryption of `Codable` payloads with `recordId\|modifiedDate` AAD binding |
 | **Models** | Value types: `SyncEntityState`, `SyncResults`, `SyncMapping`, `SyncTimestamp`, `DateFormatting` |
 | **DTO** | Internal wire types (`RawJSON`, `JSONValue` preserve server bytes without `AnyCodable`) |
 | **Errors** | `SyncError` enum; `SyncNotFound` protocol for cross-module "not-found" recognition |
-| **Persistence** | JSON state under `~/.config/<namespace>/`, exclusive `flock`, atomic 0o600 writes |
+| **Persistence** | Atomic state persistence (`SyncStateJournal`), `flock` locking, mode 0o600 writes |
 | **SQLite** | Generic row helpers for local sync; `Connection: @unchecked Sendable` extension |
 
 ### Consumers
@@ -61,7 +63,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/FradSer/apple-sync-kit.git", from: "0.1.0"),
+  .package(url: "https://github.com/FradSer/apple-sync-kit.git", from: "0.5.0"),
 ],
 targets: [
   .target(

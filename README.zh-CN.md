@@ -11,34 +11,36 @@
 该库不内置任何实体类型或 JSON 模式。消费方项目通过 `WritableKeyPath` 传入自己的 `Codable` 类型，并以字符串名称标识实体。依赖向内指向；没有组合根——组装工作由消费方 CLI 完成。
 
 ```
-SyncEngine（无状态算法）
+SyncCoordinator（深度双向同步协调器）
     ↓
-D1SyncClient（HTTP 传输，actor）
+LocalSyncSource（统一本地存储适配器 Seam: SnapshotSyncSource / FlaggedSyncSource）
+    ↓
+D1SyncClient（HTTP 传输，actor）/ SyncRemoteClient
     ↑
-ConfigStore（持久化）    EncryptionService（AES-GCM，actor）
+ConfigStore / SyncStateJournal（原子事务 sync-state.json）    EncryptionService（AES-GCM，actor）
     ↑
 SQLiteSyncStore（本地数据库）
 ```
 
-### 同步策略
+### 同步架构
 
-引擎提供两种推送策略和一种拉取：
+`SyncCoordinator` 通过统一的存储适配器协议 `LocalSyncSource` 提供标准流水线：
 
-- **`pushSnapshot`** —— 用于 EventKit/macOS。将当前状态与记录的快照进行差异比较，推送已变更的项目，然后软删除本地已不存在的远程 ID。状态在任何删除 RPC 发送之前就已持久化，因此失败的删除不会丢失已记录的推送。
-- **`pushLocalOnly`** —— 用于 SQLite/Linux。推送标记为 `is_local_only` 的项目，清除该标记，然后处理删除。
-- **`pull`** —— 基于游标的增量拉取，使用 last-write-wins 冲突解决。项目提供 upsert 和 delete 的闭包。
+- **`SyncCoordinator`** —— 统一管理跨进程文件锁（`flock`）、push 与 pull 流水线、以及通过 `SyncStateJournal` 原子提交状态到 `sync-state.json`。
+- **`SnapshotSyncSource`** —— 适用于 EventKit/macOS：基于内存快照比对变更与删除候选，支持 `volatileKeys` 屏蔽易变字段。
+- **`FlaggedSyncSource`** —— 适用于 SQLite/Linux：基于 `is_local_only` 标记提取变更，处理 tombstone 软删除行与远端更新持久化。
 
 ## 模块
 
 | 模块 | 用途 |
 |---|---|
-| **Engine** | 无状态同步算法（`pushSnapshot`、`pushLocalOnly`、`pull`） |
-| **Network** | 基于 `actor` 的 D1 Worker HTTP 客户端；批量大小 500（必须与 Worker 的 `MAX_BATCH_SIZE` 匹配） |
+| **Engine** | `SyncCoordinator` 编排器与 `LocalSyncSource` 存储适配器 Seam |
+| **Network** | 基于 `actor` 的 D1 Worker HTTP 客户端（实现 `SyncRemoteClient`）；批量大小 500（必须与 Worker 的 `MAX_BATCH_SIZE` 匹配） |
 | **Crypto** | 对 `Codable` 载荷进行 AES-GCM 加密，绑定 `recordId|modifiedDate` 作为 AAD |
 | **Models** | 值类型：`SyncEntityState`、`SyncResults`、`SyncMapping`、`SyncTimestamp`、`DateFormatting` |
 | **DTO** | 内部线格式类型（`RawJSON`、`JSONValue` 保留服务器原始字节，无需 `AnyCodable`） |
 | **Errors** | `SyncError` 枚举；`SyncNotFound` 协议用于跨模块的"未找到"识别 |
-| **Persistence** | `~/.config/<namespace>/` 下的 JSON 状态，独占 `flock`，原子 0o600 写入 |
+| **Persistence** | 原子单文件事务（`SyncStateJournal`），独占 `flock`，原子 0o600 写入 |
 | **SQLite** | 本地同步的通用行辅助方法；`Connection: @unchecked Sendable` 扩展 |
 
 ### 消费方
