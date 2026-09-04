@@ -26,9 +26,14 @@ public struct SyncJournalState: Codable, Sendable, Equatable {
 /// Uses temporary files and POSIX atomic renames with 0o600 permissions.
 public struct SyncStateJournal: Sendable {
   public let journalPath: String
+  private let readData: @Sendable (URL) throws -> Data
 
-  public init(journalPath: String) {
+  public init(
+    journalPath: String,
+    readData: @escaping @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }
+  ) {
     self.journalPath = journalPath
+    self.readData = readData
   }
 
   /// Loads current journal state from disk. Returns an empty state only when the
@@ -40,7 +45,7 @@ public struct SyncStateJournal: Sendable {
 
     let data: Data
     do {
-      data = try Data(contentsOf: URL(fileURLWithPath: journalPath))
+      data = try readData(URL(fileURLWithPath: journalPath))
     } catch {
       throw SyncError.unknown(
         "Cannot read sync journal at \(journalPath): \(error.localizedDescription)")
